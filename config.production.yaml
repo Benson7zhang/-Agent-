@@ -1,0 +1,57 @@
+# 大数据量生产环境配置
+
+# 推荐配置用于处理 1.6GB+ 数据
+mode: all
+full_data: true
+
+# 并发设置 - 根据 CPU 核心数调整
+# 建议：CPU 核心数的 50-75%
+ingest_workers: 8
+
+# 启用增量入库 - 跳过未变化的文件
+incremental_ingest: true
+
+# 日志设置
+log_level: INFO  # 生产环境使用 INFO，调试时使用 DEBUG
+log_file: outputs/smart_finqa.log
+
+# 缓存设置 - 提升查询性能
+enable_cache: true
+cache_size: 500  # 增大缓存以处理更多查询
+
+# 知识库设置 - 控制内存使用
+kb_max_documents: 5000
+kb_max_chunks_per_paper: 20
+kb_use_embeddings: false  # 大数据量时建议关闭以节省内存
+
+# 日志限制 - 防止日志文件过大
+ingestion_log_limit: 500
+
+# 数据库配置
+database:
+  # 推荐使用 MySQL 处理大数据量
+  backend: mysql
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: "your-password"
+  database: smart_finqa
+
+  # 如果使用 SQLite（不推荐大数据量）
+  # backend: sqlite
+  # sqlite_path: outputs/finance.db
+
+# LLM 配置（可选）
+llm:
+  base_url: ""  # 如：https://api.openai.com/v1
+  api_key: ""
+  model: ""  # 如：gpt-4
+  embedding_model: ""
+  timeout_seconds: 60  # 增加超时时间
+
+# 性能优化建议：
+# 1. 使用 SSD 存储以提升 I/O 性能
+# 2. 确保至少 8GB 可用内存
+# 3. 使用 MySQL 而非 SQLite
+# 4. 根据 CPU 核心数调整 ingest_workers
+# 5. 定期清理日志文件

@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local system files
+.DS_Store
+Thumbs.db
+
+# Local secrets and environment
+.env
+.env.*
+!.env.example
+
+# Agent/skill local files
+.skill
+.skills/
+.codex/
+.agents/
+*.skill
+
+# Runtime outputs and generated artifacts
+outputs/
+result/
+result_*.xlsx
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Large/local datasets
+样例数据/
+测试数据/
+全量数据/
+数据/
+*.pdf
+*.xlsx
+*.xls
+
+# Packaging artifacts
+build/
+dist/
+*.egg-info/

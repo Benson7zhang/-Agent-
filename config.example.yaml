@@ -1,0 +1,48 @@
+# Smart FinQA Configuration File
+# 财报智能问答Agent 系统配置文件
+
+# Pipeline mode: ingest, task2, task3, all
+mode: all
+
+# Use local test/full dataset instead of sample data
+full_data: false
+
+# Number of concurrent workers for PDF ingestion
+ingest_workers: 4
+
+# Enable incremental ingestion (skip unchanged files)
+incremental_ingest: true
+
+# Knowledge base settings
+kb_max_documents: 5000
+kb_max_chunks_per_paper: 20
+kb_use_embeddings: false
+
+# Logging settings
+log_level: INFO  # DEBUG, INFO, WARNING, ERROR
+log_file: outputs/smart_finqa.log
+
+# Query cache settings
+enable_cache: true
+cache_size: 100
+
+# Ingestion log limit
+ingestion_log_limit: 300
+
+# Database configuration
+database:
+  backend: sqlite  # sqlite or mysql
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: ""
+  database: smart_finqa
+  sqlite_path: outputs/finance.db
+
+# LLM configuration (OpenAI-compatible API)
+llm:
+  base_url: ""  # e.g., https://api.openai.com/v1
+  api_key: ""
+  model: ""  # e.g., gpt-4
+  embedding_model: ""  # e.g., text-embedding-ada-002
+  timeout_seconds: 40
