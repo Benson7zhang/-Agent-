@@ -446,3 +446,9 @@ python3 run_pipeline.py --mode all --full-data true
 ## 项目说明
 
 本项目定位为财报智能问答Agent 系统，README 用于说明系统能力、运行方式、数据输入输出和结果复现流程。如需适配特定交付场景，请按目标要求确认文件命名、附件数量和匿名性检查。
+
+---
+
+## 开源协议
+
+本项目采用 MIT License，详情请见 [LICENSE](LICENSE)。
