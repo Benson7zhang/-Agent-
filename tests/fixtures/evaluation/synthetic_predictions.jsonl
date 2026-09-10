@@ -1,0 +1,3 @@
+{"schema_version":"1.1","record_type":"prediction_set","dataset_id":"synthetic-evaluator-contract-v1"}
+{"schema_version":"1.1","record_type":"financial_fact_prediction","prediction_id":"pred-revenue","company_id":"SYNTH-001","period":"2024FY","statement_scope":"consolidated","period_type":"current","metric":"operating_revenue","normalized_value":"1250.005","unit":"CNY_10K","currency":"CNY","source":{"source_file":"synthetic\\report.pdf","page_no":10,"table_name":"Income statement","row_label":"Operating revenue","column_label":"2024"}}
+{"schema_version":"1.1","record_type":"question_answer_prediction","prediction_id":"pred-qa-revenue","question_id":"qa-revenue","answer":"1250.00","source":{"source_file":"synthetic/report.pdf","page_no":11}}

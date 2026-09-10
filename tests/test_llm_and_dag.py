@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from smart_finqa.llm import LLMClient
 from smart_finqa.planner import TaskPlanner
 
@@ -36,3 +38,15 @@ def test_parse_intent_via_llm() -> None:
     intent = planner.parse_intent("金花股份2025年三季度利润总额是多少")
     assert intent["intent"] == "single_metric"
     assert intent["slots"]["metric"] == "total_profit"
+
+
+class _FailingLLM:
+    def complete_json(self, system_prompt: str, user_prompt: str) -> dict:
+        raise RuntimeError("configured service unavailable")
+
+
+def test_explicit_llm_failure_is_not_silently_replaced_by_rules() -> None:
+    planner = TaskPlanner(llm_client=_FailingLLM())
+
+    with pytest.raises(RuntimeError, match="configured service unavailable"):
+        planner.parse_intent("金花股份利润总额")

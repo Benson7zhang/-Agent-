@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import gc
 import os
-import psutil
 import time
 from dataclasses import dataclass
 from typing import Any
+
+import psutil
 
 
 @dataclass
 class ResourceStats:
     """System resource statistics."""
+
     memory_used_mb: float
     memory_percent: float
     cpu_percent: float
@@ -124,7 +126,7 @@ class ProgressTracker:
 
         bar_length = 40
         filled = int(bar_length * self.current / self.total)
-        bar = "█" * filled + "░" * (bar_length - filled)
+        bar = "#" * filled + "-" * (bar_length - filled)
 
         print(
             f"\r{self.description}: [{bar}] {self.current}/{self.total} "

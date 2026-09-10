@@ -1,2 +1,1 @@
 """Smart financial QA package."""
-

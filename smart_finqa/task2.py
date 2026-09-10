@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
-import re
 from typing import Any
 
 from openpyxl import load_workbook
 
 from .core import report_period_order_value
+from .safe_query import SessionState
 
 
 @dataclass(slots=True)
@@ -173,10 +174,6 @@ CHINESE_TOP_N = {
 }
 
 
-def _question_year_anchor() -> int:
-    return 2025
-
-
 def _normalize_number(raw: str) -> float:
     return float(raw.replace(",", "").strip())
 
@@ -219,7 +216,8 @@ def resolve_periods(question: str, context: dict[str, Any] | None = None) -> dic
     context = context or {}
     result: dict[str, Any] = {}
     range_match = re.search(
-        r"(\d{4})\s*(?:年至|年到|年-|-|至)\s*(\d{4})年?(第一季度|一季度|上半年|半年度|前三季度|第三季度|三季度|年度|年报)?",
+        r"(\d{4})\s*年?\s*(?:至|到|-)\s*(\d{4})\s*年?\s*"
+        r"(第一季度|一季度|上半年|半年度|前三季度|第三季度|三季度|年度|年报)?",
         question,
     )
     if range_match:
@@ -231,7 +229,10 @@ def resolve_periods(question: str, context: dict[str, Any] | None = None) -> dic
         return result
 
     explicit_periods: list[str] = []
-    for year, token in re.findall(r"(\d{4})年(第一季度|一季度|上半年|半年度|前三季度|第三季度|三季度|年度|年报)", question):
+    for year, token in re.findall(
+        r"(\d{4})\s*年\s*(第一季度|一季度|上半年|半年度|前三季度|第三季度|三季度|年度|年报)",
+        question,
+    ):
         explicit_periods.append(_specific_period_to_code(int(year), token))
     if len(explicit_periods) >= 2:
         explicit_periods = sorted(set(explicit_periods), key=report_period_order_value)
@@ -243,23 +244,38 @@ def resolve_periods(question: str, context: dict[str, Any] | None = None) -> dic
         result["report_period"] = explicit_periods[-1]
         return result
 
-    year_only = re.search(r"(\d{4})年", question)
+    year_only = re.search(r"(\d{4})\s*年", question)
     if year_only:
         result["report_period"] = f"{int(year_only.group(1))}FY"
         return result
 
     if "去年" in question:
-        result["report_period"] = f"{_question_year_anchor() - 1}FY"
+        anchor = str(context.get("report_period") or context.get("end_period") or "")
+        if re.fullmatch(r"\d{4}(?:Q[1-3]|FY)", anchor):
+            result["report_period"] = f"{int(anchor[:4]) - 1}FY"
+        else:
+            result["needs_period_anchor"] = True
         return result
     if "近三年" in question or "近几年" in question:
-        end_period = context.get("report_period") or f"{_question_year_anchor()}FY"
-        result["start_period"] = f"{_question_year_anchor() - 2}Q1"
-        result["end_period"] = str(end_period)
+        end_period = str(context.get("report_period") or context.get("end_period") or "")
+        if re.fullmatch(r"\d{4}(?:Q[1-3]|FY)", end_period):
+            result["start_period"] = f"{int(end_period[:4]) - 2}Q1"
+            result["end_period"] = end_period
+        else:
+            result["needs_period_anchor"] = True
         return result
     if "前三季度" in question:
-        result["report_period"] = f"{_question_year_anchor()}Q3"
+        anchor = str(context.get("report_period") or context.get("end_period") or "")
+        if re.fullmatch(r"\d{4}(?:Q[1-3]|FY)", anchor):
+            result["report_period"] = f"{anchor[:4]}Q3"
+        else:
+            result["needs_period_anchor"] = True
     elif "上半年" in question:
-        result["report_period"] = f"{_question_year_anchor()}Q2"
+        anchor = str(context.get("report_period") or context.get("end_period") or "")
+        if re.fullmatch(r"\d{4}(?:Q[1-3]|FY)", anchor):
+            result["report_period"] = f"{anchor[:4]}Q2"
+        else:
+            result["needs_period_anchor"] = True
     return result
 
 
@@ -320,22 +336,12 @@ class CompanyResolver:
             resolved = self._resolve_partial(token)
             if resolved:
                 return resolved
-        fallback = self._fallback_company_candidate(text)
-        if fallback:
-            return {
-                "stock_code": "",
-                "stock_abbr": fallback,
-                "company_name": fallback,
-            }
         return None
 
     def _resolve_partial(self, candidate: str) -> dict[str, str] | None:
         if not candidate:
             return None
-        hits = [
-            item for item in self.records
-            if candidate in item.stock_abbr or candidate in item.company_name
-        ]
+        hits = [item for item in self.records if candidate in item.stock_abbr or candidate in item.company_name]
         if len(hits) == 1:
             return self._to_dict(hits[0])
         return None
@@ -348,29 +354,29 @@ class CompanyResolver:
             "company_name": item.company_name,
         }
 
-    @staticmethod
-    def _fallback_company_candidate(text: str) -> str | None:
-        explicit = re.search(r"企业名称[:：]\s*([\u4e00-\u9fffA-Za-z0-9]{2,12})", text)
-        if explicit:
-            return explicit.group(1).strip()
-        patterns = [
-            r"([\u4e00-\u9fff]{2,12}(?:药业|制药|集团|股份|白药|三九))",
-            r"([\u4e00-\u9fff]{2,8})（\d{6}）",
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, text)
-            if match:
-                return match.group(1).strip()
-        return None
-
 
 class QuestionAnalyzer:
     def __init__(self, company_resolver: CompanyResolver) -> None:
         self.company_resolver = company_resolver
 
-    def analyze_turn(self, question: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
-        context = dict(context or {})
+    def analyze_turn(
+        self,
+        question: str,
+        context: dict[str, Any] | SessionState | None = None,
+    ) -> dict[str, Any]:
+        session_state = context if isinstance(context, SessionState) else SessionState(slots=context or {})
+        context = dict(session_state.slots)
         question = str(question).strip()
+
+        def with_session_state(result: dict[str, Any]) -> dict[str, Any]:
+            result["session_state"] = SessionState(
+                slots=result.get("context", {}),
+                context={
+                    "last_intent": str(result.get("intent", "")),
+                    "needs_clarification": bool(result.get("need_clarify")),
+                },
+            )
+            return result
 
         if self._is_chart_followup(question) and context.get("last_query_spec"):
             query_spec = dict(context["last_query_spec"])
@@ -378,16 +384,33 @@ class QuestionAnalyzer:
             context["analysis_type"] = query_spec.get("analysis_type")
             context["chart_request"] = query_spec.get("chart_request")
             context["last_query_spec"] = query_spec
-            return {
-                "intent": query_spec.get("analysis_type", "single_metric"),
-                "need_clarify": False,
-                "clarify_question": "",
-                "context": context,
-                "query_spec": query_spec,
-            }
+            return with_session_state(
+                {
+                    "intent": query_spec.get("analysis_type", "single_metric"),
+                    "need_clarify": False,
+                    "clarify_question": "",
+                    "context": context,
+                    "query_spec": query_spec,
+                }
+            )
 
         company = self.company_resolver.resolve(question)
         if company:
+            previous_code = context.get("stock_code")
+            if previous_code and company.get("stock_code") and company["stock_code"] != previous_code:
+                for key in (
+                    "metric",
+                    "metrics",
+                    "report_period",
+                    "start_period",
+                    "end_period",
+                    "periods",
+                    "chart_request",
+                    "analysis_type",
+                    "last_query_spec",
+                    "needs_period_anchor",
+                ):
+                    context.pop(key, None)
             context.update(company)
 
         metrics = self._detect_metrics(question)
@@ -400,6 +423,15 @@ class QuestionAnalyzer:
                 metrics = [TASK2_METRICS[context["metric"]]]
 
         period_info = resolve_periods(question, context)
+        if "report_period" in period_info:
+            for key in ("start_period", "end_period", "periods", "needs_period_anchor"):
+                context.pop(key, None)
+        elif "periods" in period_info:
+            for key in ("report_period", "needs_period_anchor"):
+                context.pop(key, None)
+        elif "start_period" in period_info or "end_period" in period_info:
+            for key in ("report_period", "periods", "needs_period_anchor"):
+                context.pop(key, None)
         context.update(period_info)
 
         analysis_type = self._detect_analysis_type(question, metrics, context)
@@ -410,23 +442,27 @@ class QuestionAnalyzer:
 
         clarify_question = self._clarify_question(context)
         if clarify_question:
-            return {
-                "intent": analysis_type,
-                "need_clarify": True,
-                "clarify_question": clarify_question,
-                "context": context,
-                "query_spec": None,
-            }
+            return with_session_state(
+                {
+                    "intent": analysis_type,
+                    "need_clarify": True,
+                    "clarify_question": clarify_question,
+                    "context": context,
+                    "query_spec": None,
+                }
+            )
 
         query_spec = self._build_query_spec(question, metrics, context)
         context["last_query_spec"] = query_spec
-        return {
-            "intent": analysis_type,
-            "need_clarify": False,
-            "clarify_question": "",
-            "context": context,
-            "query_spec": query_spec,
-        }
+        return with_session_state(
+            {
+                "intent": analysis_type,
+                "need_clarify": False,
+                "clarify_question": "",
+                "context": context,
+                "query_spec": query_spec,
+            }
+        )
 
     def _detect_metrics(self, question: str) -> list[MetricSpec]:
         hits: dict[str, tuple[int, int, MetricSpec]] = {}
@@ -467,7 +503,9 @@ class QuestionAnalyzer:
             return "trend"
         if any(token in question for token in ("相比", "对比", "比较")) or len(context.get("periods", [])) >= 2:
             return "comparison"
-        if any(token in question.lower() for token in ("top",)) or any(token in question for token in ("排名", "最高", "前五", "前三", "前十")):
+        if any(token in question.lower() for token in ("top",)) or any(
+            token in question for token in ("排名", "最高", "前五", "前三", "前十")
+        ):
             return "topn_metric"
         if any(token in question for token in ("超过", "高于", "低于", "为负", "为正", "有哪些", "哪些")) and metrics:
             return "filter"
@@ -476,6 +514,8 @@ class QuestionAnalyzer:
     @staticmethod
     def _clarify_question(context: dict[str, Any]) -> str:
         analysis_type = context.get("analysis_type", "single_metric")
+        if context.get("needs_period_anchor"):
+            return "请补充用于相对时间计算的年份或报告期。"
         if not context.get("stock_abbr") and analysis_type in {"single_metric", "trend", "comparison"}:
             return "请补充公司名称或股票代码。"
         if not context.get("metric"):
@@ -483,7 +523,7 @@ class QuestionAnalyzer:
         if analysis_type in {"single_metric", "filter", "topn_metric", "comparison"} and not (
             context.get("report_period") or context.get("start_period")
         ):
-            return "请补充报告期（如2025年第三季度）。"
+            return "请补充明确的年份和报告期。"
         return ""
 
     def _build_query_spec(
@@ -511,6 +551,15 @@ class QuestionAnalyzer:
             "select_fields": [],
             "top_n": _parse_top_n(question),
         }
+        ratio_metrics = self._detect_ratio_operands(question, metrics)
+        if ratio_metrics is not None:
+            numerator, denominator = ratio_metrics
+            query_spec["post_compute"] = "ratio"
+            query_spec["calculation"] = {
+                "numerator": numerator.field,
+                "denominator": denominator.field,
+                "output_field": f"{numerator.field}_to_{denominator.field}_ratio",
+            }
 
         if analysis_type == "single_metric":
             query_spec["select_fields"] = ["stock_abbr", "report_period", metric.field]
@@ -519,16 +568,18 @@ class QuestionAnalyzer:
         if analysis_type == "trend":
             query_spec["select_fields"] = ["report_period", "report_year", "stock_abbr", metric.field]
             query_spec["chart_request"] = query_spec.get("chart_request") or "line"
-            if not query_spec["start_period"]:
-                query_spec["start_period"] = "2022Q1"
             return query_spec
 
         if analysis_type == "topn_metric":
-            query_spec["select_fields"] = ["stock_code", "stock_abbr"] + [TASK2_METRICS[item.key].field for item in metrics]
+            query_spec["select_fields"] = ["stock_code", "stock_abbr"] + [
+                TASK2_METRICS[item.key].field for item in metrics
+            ]
             return query_spec
 
         if analysis_type == "intersection_topn":
-            query_spec["select_fields"] = ["stock_code", "stock_abbr"] + [TASK2_METRICS[item.key].field for item in metrics]
+            query_spec["select_fields"] = ["stock_code", "stock_abbr"] + [
+                TASK2_METRICS[item.key].field for item in metrics
+            ]
             query_spec["post_compute"] = "intersection_topn"
             query_spec["chart_request"] = None
             return query_spec
@@ -563,3 +614,19 @@ class QuestionAnalyzer:
                 elif item.field == "net_profit":
                     query_spec["filters"].append({"field": item.field, "op": ">", "value": 0})
         return query_spec
+
+    @staticmethod
+    def _detect_ratio_operands(question: str, metrics: list[MetricSpec]) -> tuple[MetricSpec, MetricSpec] | None:
+        ratio_position = question.rfind("比值")
+        if ratio_position < 0 or len(metrics) < 2:
+            return None
+        prefix = question[:ratio_position]
+        positioned: list[tuple[int, MetricSpec]] = []
+        for metric in metrics:
+            last_position = max((prefix.rfind(alias) for alias in metric.aliases), default=-1)
+            if last_position >= 0:
+                positioned.append((last_position, metric))
+        if len(positioned) < 2:
+            return None
+        positioned.sort(key=lambda item: item[0])
+        return positioned[-2][1], positioned[-1][1]

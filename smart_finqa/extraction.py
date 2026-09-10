@@ -4,7 +4,6 @@ import re
 
 from .core import report_period_sort_key
 
-
 # Pre-compiled regex patterns for better performance
 NUMBER_RE = re.compile(r"-?\d{1,3}(?:,\d{3})*(?:\.\d+)?|-?\d+\.\d+|-?\d+")
 WHITESPACE_RE = re.compile(r"\s+")
@@ -86,7 +85,9 @@ def extract_metric_snapshot_from_text(text: str) -> dict[str, float | None]:
     """
     normalized = WHITESPACE_RE.sub(" ", text)
 
-    revenue_candidates = _extract_metric_candidates(normalized, "营业收入") + _extract_metric_candidates(normalized, "营业总收入")
+    revenue_candidates = _extract_metric_candidates(normalized, "营业收入") + _extract_metric_candidates(
+        normalized, "营业总收入"
+    )
     total_profit_candidates = _extract_metric_candidates(normalized, "利润总额")
     net_profit_candidates = _extract_metric_candidates(normalized, "归属于上市公司股东的净利润")
     if not net_profit_candidates:
@@ -96,14 +97,28 @@ def extract_metric_snapshot_from_text(text: str) -> dict[str, float | None]:
     eps_candidates = _extract_metric_candidates(normalized, "基本每股收益")
 
     revenue_value, revenue_yoy, revenue_secondary = _pick_best_candidate(revenue_candidates, min_abs_value=1000000)
-    if revenue_yoy is None and revenue_value and revenue_secondary and abs(revenue_secondary) > 1000 and revenue_secondary != 0:
+    if (
+        revenue_yoy is None
+        and revenue_value
+        and revenue_secondary
+        and abs(revenue_secondary) > 1000
+        and revenue_secondary != 0
+    ):
         revenue_yoy = round((revenue_value - revenue_secondary) / revenue_secondary * 100.0, 4)
 
     profit_value, profit_yoy, profit_secondary = _pick_best_candidate(total_profit_candidates, min_abs_value=100000)
-    if profit_yoy is None and profit_value and profit_secondary and abs(profit_secondary) > 1000 and profit_secondary != 0:
+    if (
+        profit_yoy is None
+        and profit_value
+        and profit_secondary
+        and abs(profit_secondary) > 1000
+        and profit_secondary != 0
+    ):
         profit_yoy = round((profit_value - profit_secondary) / profit_secondary * 100.0, 4)
 
-    net_profit_value, net_profit_yoy, net_profit_secondary = _pick_best_candidate(net_profit_candidates, min_abs_value=100000)
+    net_profit_value, net_profit_yoy, net_profit_secondary = _pick_best_candidate(
+        net_profit_candidates, min_abs_value=100000
+    )
     if (
         net_profit_yoy is None
         and net_profit_value

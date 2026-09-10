@@ -4,7 +4,6 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-
 SCHEMA_FIELDS = {
     "核心业绩指标表": [
         ("serial_number", "序号", "int", "序号"),

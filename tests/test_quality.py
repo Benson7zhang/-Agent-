@@ -1,8 +1,8 @@
 from smart_finqa.quality import (
+    format_reason_with_references,
     format_single_metric_answer,
     format_topn_analysis_answer,
     format_trend_analysis_answer,
-    format_reason_with_references,
 )
 
 
@@ -53,3 +53,13 @@ def test_format_reason_with_references() -> None:
     assert "12 条" in content
     assert "2 条" in content
     assert "渠道扩张" in content or "医保目录" in content
+
+
+def test_format_reason_uses_page_level_citation_contract() -> None:
+    refs = [{"paper_path": "./reports/x.pdf", "page_no": 12, "quote": "渠道扩张推动收入增长。"}]
+
+    content = format_reason_with_references("收入为什么增长", sql_rows_count=1, references=refs)
+
+    assert "渠道扩张" in content
+    assert "./reports/x.pdf" in content
+    assert "第12页" in content

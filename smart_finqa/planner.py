@@ -6,7 +6,6 @@ from typing import Any
 from .core import parse_report_period
 from .llm import LLMClient
 
-
 INTENT_SYSTEM_PROMPT = """
 你是财报问答意图识别器。返回JSON对象，字段:
 - intent: single_metric|trend|topn_metric|comparison|reason
@@ -34,29 +33,25 @@ class TaskPlanner:
     def parse_intent(self, question: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
         context = context or {}
         if self.llm_client:
-            try:
-                payload = self.llm_client.complete_json(
-                    INTENT_SYSTEM_PROMPT,
-                    f"上下文:{context}\n问题:{question}",
-                )
-                if isinstance(payload, dict) and "intent" in payload:
-                    return payload
-            except Exception:
-                pass
+            payload = self.llm_client.complete_json(
+                INTENT_SYSTEM_PROMPT,
+                f"上下文:{context}\n问题:{question}",
+            )
+            if not isinstance(payload, dict) or "intent" not in payload:
+                raise RuntimeError("Invalid LLM intent response: missing intent")
+            return payload
         return self._fallback_parse_intent(question, context)
 
     def plan_subtasks(self, question: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
         context = context or {}
         if self.llm_client:
-            try:
-                payload = self.llm_client.complete_json(
-                    SUBTASK_SYSTEM_PROMPT,
-                    f"上下文:{context}\n问题:{question}",
-                )
-                if isinstance(payload, dict) and isinstance(payload.get("subtasks"), list):
-                    return payload
-            except Exception:
-                pass
+            payload = self.llm_client.complete_json(
+                SUBTASK_SYSTEM_PROMPT,
+                f"上下文:{context}\n问题:{question}",
+            )
+            if not isinstance(payload, dict) or not isinstance(payload.get("subtasks"), list):
+                raise RuntimeError("Invalid LLM task-plan response: missing subtasks")
+            return payload
         return self._fallback_plan(question)
 
     def _fallback_parse_intent(self, question: str, context: dict[str, Any]) -> dict[str, Any]:
@@ -88,8 +83,10 @@ class TaskPlanner:
                 period = f"{year}FY"
             slots["report_period"] = period
 
-        need_clarify = intent in {"single_metric", "trend"} and "report_period" not in slots and intent == "single_metric"
-        clarify_question = "请补充报告期（如2025年三季度）" if need_clarify else ""
+        need_clarify = (
+            intent in {"single_metric", "trend"} and "report_period" not in slots and intent == "single_metric"
+        )
+        clarify_question = "请补充明确的年份和报告期" if need_clarify else ""
         return {
             "intent": intent,
             "slots": slots,
@@ -109,7 +106,9 @@ class TaskPlanner:
                 kind = "retrieval"
             if "最大" in part or "总结" in part:
                 kind = "reason"
-            subtasks.append({"id": f"s{idx}", "kind": kind, "goal": part, "depends_on": [f"s{idx-1}"] if idx > 1 else []})
+            subtasks.append(
+                {"id": f"s{idx}", "kind": kind, "goal": part, "depends_on": [f"s{idx - 1}"] if idx > 1 else []}
+            )
         if len(subtasks) == 1 and subtasks[0]["kind"] == "retrieval":
             subtasks.append({"id": "s2", "kind": "reason", "goal": "基于检索结果给出总结", "depends_on": ["s1"]})
         return {"subtasks": subtasks}

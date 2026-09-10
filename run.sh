@@ -1,15 +1,25 @@
-#!/bin/bash
-# 一键运行脚本 - 自动处理所有配置
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 一键运行脚本。依赖安装由开发环境初始化阶段完成。
 
 echo "================================"
-echo "  财报智能问答Agent 系统 - 一键运行"
+echo "  Smart FinQA 财报智能问答系统"
 echo "================================"
 echo ""
 
-# 检查依赖
-echo "1. 检查依赖..."
-pip3 install -q openpyxl pypdf pandas matplotlib pyyaml psutil mysql-connector-python pytest 2>/dev/null
-echo "   ✓ 依赖已安装"
+if [ -x ".venv/bin/python" ]; then
+    PYTHON=".venv/bin/python"
+else
+    PYTHON="python3"
+fi
+
+echo "1. 检查环境..."
+if ! "$PYTHON" -c "import matplotlib, openpyxl, pandas, psutil, pypdf, smart_finqa, yaml" 2>/dev/null; then
+    echo "   依赖未安装，请先执行: python -m pip install -r requirements.txt" >&2
+    exit 1
+fi
+echo "   环境可用"
 echo ""
 
 # 自动选择数据目录
@@ -29,20 +39,23 @@ echo ""
 
 # 询问运行模式
 echo "3. 选择运行模式:"
-echo "   1) 完整流程 (入库+任务2+任务3) - 推荐"
-echo "   2) 仅入库"
+echo "   1) 完整流程 (已有人工复核事实时使用)"
+echo "   2) 仅入库并生成复核清单 - 首次运行推荐"
 echo "   3) 仅任务2"
 echo "   4) 仅任务3"
 echo ""
-read -p "请选择 [1-4，默认1]: " choice
-choice=${choice:-1}
+read -r -p "请选择 [1-4，默认2]: " choice
+choice=${choice:-2}
 
 case $choice in
     1) MODE="all" ;;
     2) MODE="ingest" ;;
     3) MODE="task2" ;;
     4) MODE="task3" ;;
-    *) MODE="all" ;;
+    *)
+        echo "无效选择: $choice" >&2
+        exit 2
+        ;;
 esac
 
 echo ""
@@ -55,9 +68,9 @@ echo "================================"
 echo ""
 
 # 运行
-python3 run_pipeline.py \
-    --mode $MODE \
-    --full-data $FULL_DATA \
+"$PYTHON" run_pipeline.py \
+    --mode "$MODE" \
+    --full-data "$FULL_DATA" \
     --workers 4 \
     --log-level INFO
 
@@ -66,10 +79,5 @@ echo "================================"
 echo "  运行完成！"
 echo "================================"
 echo ""
-echo "输出文件:"
-echo "  - 数据库: outputs/finance.db"
-echo "  - 任务2: result_2.xlsx"
-echo "  - 任务3: result_3.xlsx"
-echo "  - 图表: result/*.jpg"
-echo "  - 日志: outputs/smart_finqa.log"
+echo "请查看命令输出和 outputs/run_log.json 获取本次实际生成的文件。"
 echo ""

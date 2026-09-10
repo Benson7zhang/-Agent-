@@ -4,7 +4,6 @@ from typing import Any
 
 from .core import report_period_sort_key
 
-
 METRIC_LABELS = {
     "total_profit": "利润总额",
     "net_profit": "净利润",
@@ -61,7 +60,11 @@ def format_single_metric_answer(slots: dict[str, Any], row: dict[str, Any]) -> s
     value = row.get(metric)
     if value is None:
         fallback_col = next(
-            (k for k in row.keys() if k not in {"stock_abbr", "stock_code", "report_period", "report_year"} and row.get(k) is not None),
+            (
+                k
+                for k in row.keys()
+                if k not in {"stock_abbr", "stock_code", "report_period", "report_year"} and row.get(k) is not None
+            ),
             None,
         )
         if fallback_col:
@@ -139,15 +142,19 @@ def format_reason_with_references(question: str, sql_rows_count: int, references
     if not refs:
         return f"基于结构化数据分析，围绕“{question}”共检索到 {sql_rows_count} 条财务记录，但缺少研报证据支撑。"
     snippet = ""
+    source = ""
     for item in refs:
-        text = str(item.get("text", "")).strip().replace("\n", " ")
+        text = str(item.get("quote") or item.get("text") or "").strip().replace("\n", " ")
         if len(text) > 90:
             text = text[:90] + "..."
         if text:
             snippet = text
+            path = str(item.get("paper_path") or "")
+            page_no = item.get("page_no")
+            source = f"（来源：{path}，第{page_no}页）" if path and page_no else ""
             break
     return (
         f"围绕“{question}”，共检索到 {sql_rows_count} 条结构化财务记录，"
         f"并匹配到 {len(refs)} 条研报证据。"
-        f"核心证据显示：{snippet}"
+        f"核心证据显示：{snippet}{source}"
     )

@@ -1,0 +1,14 @@
+{
+  "schema_version": "1.1",
+  "dataset_id": "synthetic-evaluator-contract-v1",
+  "dataset_kind": "synthetic",
+  "availability": "available",
+  "description": "Synthetic values used only to verify evaluator behavior.",
+  "annotation_files": [
+    "synthetic_annotations.jsonl"
+  ],
+  "numeric_tolerance": {
+    "absolute": "0.01",
+    "relative": "0"
+  }
+}
